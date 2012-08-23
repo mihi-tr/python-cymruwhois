@@ -110,7 +110,7 @@ class Client:
         else:
             return "cymruwhois:ip:" + arg
 
-    def __init__(self, host="whois.cymru.com", port=43, memcache_host='localhost:11211'):
+    def __init__(self, host="whois.cymru.com", port=43, memcache_host=None):
         self.host=host
         self.port=port
         self._connected=False
