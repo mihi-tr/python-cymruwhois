@@ -145,12 +145,14 @@ class Client:
         finally:
             self.socket.setblocking(1)
 
-    def _begin(self):
+    def _begin(self,verbose=False):
         """Explicitly connect and send BEGIN to start the lookup process"""
         self._connect()
         self._sendline("BEGIN")
         self._readline() #discard the message "Bulk mode; one IP per line. [2005-08-02 18:54:55 GMT]"
         self._sendline("PREFIX\nASNUMBER\nCOUNTRYCODE\nNOTRUNC")
+        if verbose:
+            self._sendline("VERBOSE")
         self._connected=True
 
     def disconnect(self):
@@ -174,16 +176,16 @@ class Client:
             return
         self.c.set(self.make_key(r.key), r, 60*60*6)
 
-    def lookup(self, ip):
+    def lookup(self, ip,verbose=False):
         """Look up a single address. 
         
         .. warning::
             Do not call this function inside of a loop, the performance
             will be terrible.  Instead, call lookupmany or lookupmany_dict
         """
-        return list(self.lookupmany([ip]))[0]
+        return list(self.lookupmany([ip],verbose))[0]
     
-    def lookupmany(self, ips):
+    def lookupmany(self, ips,verbose=False):
         """Look up many ip addresses"""
         ips = [str(ip).strip() for ip in ips]
 
@@ -192,22 +194,26 @@ class Client:
             not_cached = [ip for ip in batch if not cached.get(ip)]
             #print "cached:%d not_cached:%d" % (len(cached), len(not_cached))
             if not_cached:
-                for rec in self._lookupmany_raw(not_cached):
+                for rec in self._lookupmany_raw(not_cached,verbose):
                     cached[rec.key] = rec
             for ip in batch:
+                if verbose:
+                    ip=ip.split()[0] # reduce IP 
+                    """ TODO: Implement better caching for verbose lookups
+                    """
                 if ip in cached:
                     yield cached[ip]
 
-    def lookupmany_dict(self, ips):
+    def lookupmany_dict(self, ips,verbose=False):
         """Look up many ip addresses, returning a dictionary of ip -> record"""
         ips = set(ips)
-        return dict((r.key, r) for r in self.lookupmany(ips))
+        return dict((r.key, r) for r in self.lookupmany(ips,verbose))
                 
-    def _lookupmany_raw(self, ips):
+    def _lookupmany_raw(self, ips,verbose=False):
         """Do a look up for some ips"""
 
         if not self._connected:
-            self._begin()
+            self._begin(verbose)
         ips = set(ips)
         for ip in ips:
             self._sendline(ip)
@@ -220,6 +226,8 @@ class Client:
                 need -=1
                 continue
             parts=result.split("|")
+            if verbose:
+                parts=parts[0:4]+[parts[-1]]
             if len(parts)==5:
                 r=record(*parts)
             else:
